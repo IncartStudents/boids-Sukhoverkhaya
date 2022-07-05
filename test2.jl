@@ -27,7 +27,7 @@ end
 
 function ui(v::Vars)
 
-v.x=rand(10:20,10);
+v.x=rand(11:20,10);
 v.k=rand(1:5,10);
 v.xdir=fill(1,10);   # 1 - вправо, -1 - влево
 # v.ydir=fill(1,10);   # 1 - вверх, -1 - вниз
@@ -79,31 +79,20 @@ anim = @animate for i in 1:1000
                 v.k[j]=-1*v.k[j];
                 v.b[j]=v.b[j]-(v.b[j]-v.y[j])*2;
             elseif v.x[j]<=xmin # упёрся в левый край
-                if v.k[j]<0     # двигался вниз
-                    v.xdir[j]=1;
-                    v.k[j]=-1*v.k[j];
-                    v.b[j]=v.b[j]+(v.y[j]-v.b[j])*2;
-                else # двигался вверх
+                if v.k[j]>0     # двигался вниз
                     v.xdir[j]=1;
                     v.k[j]=-1*v.k[j];
                     v.b[j]=v.b[j]-(v.y[j]-v.b[j])*2;
+                else # двигался вверх
+                    v.xdir[j]=1;
+                    v.k[j]=-1*v.k[j];
+                    v.b[j]=v.b[j]+(v.y[j]-v.b[j])*2;
                 end
             elseif v.y[j]<=ymin # упёрся в нижний край
                 v.k[j]=-1*v.k[j];
                 v.b[j]=v.b[j]+(v.y[j]-v.b[j])*2;
             end
         end
-        
-        # # попадание в угол
-        # if v.y[j]==ymax && v.x[j]==xmax
-        #     v.xdir[j]=-1;
-        # elseif v.y[j]==0 && v.x[j]==xmax
-        #     v.xdir[j]=-1;
-        # elseif v.y[j]==0 && v.x[j]==0
-        #     v.xdir[j]=1;
-        # elseif v.y[j]==ymax && v.x[j]==0
-        #     v.xdir[j]=1;
-        # end
 
         if v.xdir[j]==-1
             v.x[j]=v.x[j]-1;
@@ -116,7 +105,7 @@ anim = @animate for i in 1:1000
     scatter(v.x, v.y, markershape = :utriangle, ms=3, lab="", xlim=(xmin-10,xmax+10), ylim=(xmin-10, ymax+10))
 end
 
-gif(anim, fps=15)
+gif(anim, "anim.gif", fps=15)
 
 end
 
