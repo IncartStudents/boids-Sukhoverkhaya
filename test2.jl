@@ -75,7 +75,7 @@ anim = @animate for i in 1:1000
             end
         else # если двигался влево
             # попадание в угол
-            if v.y[j]<=xmin && v.x[j]<=ymin
+            if v.y[j]<=ymin && v.x[j]<=xmin
                 v.xdir[j]=1;
             elseif v.y[j]>=ymax && v.x[j]<=xmin
                 v.xdir[j]=1;
