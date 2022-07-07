@@ -63,6 +63,7 @@ function rebound(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::V
 end
 
 function rooles(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Vector{Float64},kv::Vector{Float64})
+    ###########################################3
     rv=10;
     n=length(x);
     for i in 1:n
@@ -90,6 +91,34 @@ function rooles(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Ve
         end
 
     end
+    #######################
+    rv=80;
+    n=length(x);
+    for i in 1:n
+        xi::Vector{Float64}=[];
+        yi::Vector{Float64}=[];
+        w=0;
+        # xi=[];
+        # yi=[];
+        for j in 1:n
+            r=sqrt((x[i]-x[j])^2+(y[i]-y[j])^2);
+            if r<rv && r>0
+                push!(xi, x[j]);
+                push!(yi, y[j]);
+                w=w+1;
+            end
+        end
+
+        if w>0
+            mx=mean(xi);    # координаты центра масс
+            my=mean(yi);
+
+            dx[i],dy[i],kv[i]=coheretion(x[i],y[i],mx,my,dx[i],dy[i])
+        else
+            kv[i]=1;
+        end
+    end
+    #######################
     return dx,dy,kv
 end
 
@@ -98,6 +127,21 @@ function separation(x::Float64,y::Float64,mx::Float64,my::Float64)
     dy=y-my;
     d=sqrt(dx^2+dy^2);
     kv=10/d;
+    # f=dx/d;
+    # dx=d;
+    # dy=dy/f;
+    # dx=dx*(1/d);
+    # dy=dy*(1/d);
+    return dx,dy,kv
+end
+
+function coheretion(x::Float64,y::Float64,mx::Float64,my::Float64,dx::Float64,dy::Float64)
+    nx=mx-x;
+    ny=my-y;
+    dx=dx+nx/10;
+    dy=dy+ny/10;
+    d=sqrt(dx^2+dy^2);
+    kv=5/d;
     # f=dx/d;
     # dx=d;
     # dy=dy/f;
