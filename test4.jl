@@ -6,19 +6,24 @@ mutable struct Vars
     y::Vector{Float64}
     dx::Vector{Float64}
     dy::Vector{Float64}
-    kv::Vector{Float64}
+    rv::Float64
+    vmin::Float64
+    vmax::Float64
 
     function Vars()
         x=rand(11:250,10);
         y=rand(11:250,10);
         dx=fill(1,10);
         dy=fill(1,10);
-        kv=fill(1,10);
+        rv=50.0;
+        vmin=sqrt(2);
+        vmax=5;
 
-        new(x, y, dx, dy, kv)
+        new(x, y, dx, dy, rv, vmin, vmax)
     end
 end
 
+# отскакивание от границ поля
 function rebound(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Vector{Float64})
     xmin=10;
     xmax=290;
@@ -27,142 +32,150 @@ function rebound(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::V
     
     n=length(x);
     for i in 1:n
-        if dx[i]>0 # если двигался вправо
-            # попадание в угол
-            if y[i]>=ymax && x[i]>=xmax
-                dx[i]=-1*dx[i];
-                dy[i]=-1*dy[i];
-            elseif y[i]<=ymin && x[i]>=xmax
-                dx[i]=-1*dx[i];
-                dy[i]=-1*dy[i];
-            elseif y[i]>=ymax # упёрся в верхний край
-                dy[i]=-1*dy[i];
-            elseif x[i]>=xmax # упёрся в правый край
-                dx[i]=-1*dx[i];
-            elseif y[i]<=ymin # упёрся в нижний край
-                dy[i]=-1*dy[i];
+            # проверка выхода за границы поля из-за выполнения правил
+            if y[i]>ymax
+                y[i]=ymax
             end
-        else # если двигался влево
-            # попадание в угол
-            if y[i]<=ymin && x[i]<=xmin
+            if x[i]>xmax
+                x[i]=xmax
+            end
+            if y[i]<ymin
+                y[i]=ymin
+            end
+            if x[i]<xmin
+                x[i]=xmin
+            end
+
+            if y[i]>=ymax && x[i]>=xmax || y[i]<=ymin && x[i]>=xmax || y[i]>=ymax && x[i]<=xmin || y[i]<=ymin && x[i]<=xmin # попадание в угол
                 dx[i]=-1*dx[i];
                 dy[i]=-1*dy[i];
-            elseif y[i]>=ymax && x[i]<=xmin
+            elseif y[i]>=ymax || y[i]<=ymin # упёрся в верхний или нижний край
+                dy[i]=-1*dy[i];
+            elseif x[i]>=xmax || x[i]<=xmin # упёрся в правый или левый край
                 dx[i]=-1*dx[i];
-                dy[i]=-1*dy[i];
-            elseif y[i]>=ymax # упёрся в верхний край
-                dy[i]=-1*dy[i];
-            elseif x[i]<=xmin # упёрся в левый край
-                dx[i]=-1*dx[i];
-            elseif y[i]<=ymin # упёрся в нижний край
-                dy[i]=-1*dy[i];
+            end
+    end
+    return dx,dy
+end
+
+function separation(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Vector{Float64},rv::Float64)
+    n=length(x);
+    for i in 1:n
+        for j in 1:n
+            r=sqrt((x[i]-x[j])^2+(y[i]-y[j])^2);
+            if r<=rv && i!=j
+                dx1=-1*(x[j]-x[i]);
+                dy1=-1*(y[j]-y[i]);
+                l=sqrt(dx1^2+dy1^2);
+                dx[i]=dx[i]+dx1*(1/l);
+                dy[i]=dy[i]+dy1*(1/l);
             end
         end
     end
     return dx,dy
 end
 
-function rooles(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Vector{Float64},kv::Vector{Float64})
-    ###########################################3
-    rv=10;
+function cohesion(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Vector{Float64},rv::Float64)
     n=length(x);
     for i in 1:n
-        xi::Vector{Float64}=[];
-        yi::Vector{Float64}=[];
-        w=0;
-        # xi=[];
-        # yi=[];
+        xi=[];
+        yi=[];
+        k=0;
         for j in 1:n
             r=sqrt((x[i]-x[j])^2+(y[i]-y[j])^2);
-            if r<rv && r>0
-                push!(xi, x[j]);
-                push!(yi, y[j]);
-                w=w+1;
+            if r<=rv && i!=j
+                push!(xi, x[j])
+                push!(yi, y[j])
+                k=1;
             end
         end
 
-        if w>0
-            mx=mean(xi);    # координаты центра масс
-            my=mean(yi);
-
-            dx[i],dy[i],kv[i]=separation(x[i],y[i],mx,my)
-        else
-            kv[i]=1;
+        if k>0
+            xm=mean(xi);
+            ym=mean(yi);
+            dx1=xm-x[i];
+            dy1=ym-y[i];
+            
+            l=sqrt(dx1^2+dy1^2);
+            dx[i]=dx[i]+dx1*(1/l);
+            dy[i]=dy[i]+dy1*(1/l);
         end
-
     end
-    #######################
-    rv=80;
+
+    return dx,dy
+end
+
+function alignment(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Vector{Float64},rv::Float64)
     n=length(x);
     for i in 1:n
-        xi::Vector{Float64}=[];
-        yi::Vector{Float64}=[];
-        w=0;
-        # xi=[];
-        # yi=[];
+        dxi=[];
+        dyi=[];
+        k=0;
         for j in 1:n
             r=sqrt((x[i]-x[j])^2+(y[i]-y[j])^2);
-            if r<rv && r>0
-                push!(xi, x[j]);
-                push!(yi, y[j]);
-                w=w+1;
+            if r<=rv && i!=j
+                push!(dxi, dx[j])
+                push!(dyi, dy[j])
+                k=1;
             end
         end
 
-        if w>0
-            mx=mean(xi);    # координаты центра масс
-            my=mean(yi);
-
-            dx[i],dy[i],kv[i]=coheretion(x[i],y[i],mx,my,dx[i],dy[i])
-        else
-            kv[i]=1;
+        if k>0
+            dx1=sum(dxi);
+            dy1=sum(dyi);
+            
+            dx[i]=dx[i]+dx1;
+            dy[i]=dy[i]+dy1;
         end
     end
-    #######################
-    return dx,dy,kv
+
+    return dx,dy
 end
 
-function separation(x::Float64,y::Float64,mx::Float64,my::Float64)
-    dx=x-mx;
-    dy=y-my;
-    d=sqrt(dx^2+dy^2);
-    kv=10/d;
-    # f=dx/d;
-    # dx=d;
-    # dy=dy/f;
-    # dx=dx*(1/d);
-    # dy=dy*(1/d);
-    return dx,dy,kv
-end
 
-function coheretion(x::Float64,y::Float64,mx::Float64,my::Float64,dx::Float64,dy::Float64)
-    nx=mx-x;
-    ny=my-y;
-    dx=dx+nx/10;
-    dy=dy+ny/10;
-    d=sqrt(dx^2+dy^2);
-    kv=5/d;
-    # f=dx/d;
-    # dx=d;
-    # dy=dy/f;
-    # dx=dx*(1/d);
-    # dy=dy*(1/d);
-    return dx,dy,kv
-end
-
-function redraw(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Vector{Float64},kv::Vector{Float64})
-    x=x+kv.*dx;
-    y=y+kv.*dy;
-    scatter(x, y, markershape = :utriangle, ms=3, lab="", xlim=(0,300), ylim=(0,300))
+function redraw(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Vector{Float64})
+    x=x+dx;
+    y=y+dy;
+    # scatter(x, y, markershape = :utriangle, ms=5, lab="", xlim=(0,300), ylim=(0,300))
+    scatter(x, y, markershape = :circle, ms=5, lab="", xlim=(0,300), ylim=(0,300))
+    n=length(x)
+    for i in 1:n
+        l=5
+        lr=sqrt(dx[i]^2+dy[i]^2)
+        k=l/lr
+        dxi=dx[i]*k
+        dyi=dy[i]*k
+        x1=[x[i],x[i]+dxi]
+        y1=[y[i],y[i]+dyi]
+        plot!(x1,y1, lw=3, legend=false)
+    end
     return x,y
+end
+
+function speedcheck(dx::Vector{Float64},dy::Vector{Float64})
+    n=length(dx);
+    limit=10;
+    for i in 1:n
+        v=sqrt(dx[i]^2*dy[i]^2);
+        if v>limit
+            k=limit/v;
+            dx[i]=dx[i]*k;
+            dy[i]=dy[i]*k;
+        end
+    end
+
+    return dx,dy
 end
 
 function ui(v::Vars)
 
     anim = @animate for k in 1:1000
-        v.dx,v.dy,v.kv=rooles(v.x,v.y,v.dx,v.dy,v.kv);
+        v.dx,v.dy=cohesion(v.x,v.y,v.dx,v.dy,v.rv);
+        v.dx,v.dy=separation(v.x,v.y,v.dx,v.dy,v.rv);
+        # v.dx,v.dy=alignment(v.x,v.y,v.dx,v.dy,v.rv);
         v.dx,v.dy=rebound(v.x,v.y,v.dx,v.dy);
-        v.x,v.y=redraw(v.x,v.y,v.dx,v.dy,v.kv);
+        v.dx,v.dy=speedcheck(v.dx,v.dy);
+        v.x,v.y=redraw(v.x,v.y,v.dx,v.dy,);
     end
 
     gif(anim, "anim.gif", fps=15)
