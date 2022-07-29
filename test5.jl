@@ -34,34 +34,48 @@ function Base.:/(v1::Vec2,v2::Vec2)
     return res
 end
 
-function norm(v::Vec2)
-    n=sqrt(v.x^2+v.y^2)
+function equals(v1::Vec2,v2::Vec2)
+    if v1.x == v2.x && v1.y == v2.y
+        return true
+    else
+        return false
+    end
+end
+
+function norm(v1::Vec2, v2::Vec2)
+    n=sqrt((v1.x-v2.x)^2+(v1.y-v2.y)^2)
     return n
 end
 
-va=Vec2(6,8)
-vb=Vec2(3.3,4.4)
-norm(va)
+function vecmean(v::Vector{Vec2})
+    x=[]
+    y=[]
+    for i in 1:length(v)
+        push!(x, v[i].x)
+        push!(y, v[i].y)
+    end
 
+    res=Vec2(mean(x),mean(y))
+    return res
+end
+
+function vecsum(v::Vector{Vec2})
+    x=[]
+    y=[]
+    for i in 1:length(v)
+        push!(x, v[i].x)
+        push!(y, v[i].y)
+    end
+
+    res=Vec2(sum(x),sum(y))
+    return res
+end
 mutable struct Boid
     pos::Vec2
     speed::Vec2
     acceleration::Vec2
     viewarea::Float64
 end
-
-# n=10
-# world=fill(Boid(Vec2(0,0),Vec2(0,0),Vec2(0,0),0.0),n)
-
-# world[5]=Boid(Vec2(1,2),Vec2(3,4),Vec2(5,6))
-# world[5].speed
-
-# world[5]
-# pos=world[5].pos; speed=world[5].speed; acc=world[5].acceleration
-# pos+=Vec2(1,2); speed+=Vec2(1,2); acc+=Vec(1,2)
-# world[5]=Boid(pos,speed,acc)
-# world[4].speed=Vec2(5,6) ##!!!!!!!!!!!! работает сразу для всех строк
-# world[4].speed
 
 function return_to_borders(subj::Vec2,borders1::Vec2,borders2::Vec2)
     x=subj.x; y=subj.y
@@ -83,15 +97,15 @@ function return_to_borders(subj::Vec2,borders1::Vec2,borders2::Vec2)
     return subj
 end
 
-function where_hit(position::Vec2,borders1::Vec2,borders2::Vec2)
+function where_hit(subj::Vec2,borders1::Vec2,borders2::Vec2)
     xmin=borders1.x; ymin=borders1.y; xmax=borders2.x; ymax=borders2.y;
     result=0;
 
-    if subj.y==ymax && x==xmax || y==ymin && x==xmax || y==ymax && x==xmin || y==ymin && x==xmin # попадание в угол
+    if subj.y==ymax && subj.x==xmax || subj.y==ymin && subj.x==xmax || subj.y==ymax && subj.x==xmin || subj.y==ymin && subj.x==xmin # попадание в угол
         result=1
-    elseif y>=ymax || y<=ymin # упёрся в верхний или нижний край
+    elseif subj.y>=ymax || subj.y<=ymin # упёрся в верхний или нижний край
         result=2
-    elseif x>=xmax || x<=xmin # упёрся в правый или левый край
+    elseif subj.x>=xmax || subj.x<=xmin # упёрся в правый или левый край
         result=3
     end
 
@@ -117,171 +131,156 @@ function rebound(position::Vec2,speed::Vec2)
         dx*=-1
     end
 
-    speed=Vec2(dx,dy)
+    speed = Vec2(dx,dy)
     return speed
 end
 
-function separation(x::Vector{Float64},y::Vector{Float64},rv::Float64,dx::Vector{Float64},dy::Vector{Float64})
-    ax=fill(0.0,10);
-    ay=fill(0.0,10);
+function separation(position::Vec2,speed::Vec2,viewarea::Float64,all::Vector{Boid})
+    acc = Vec2(0,0)
+    di = Vec2[]
+    k = 0
 
-    n=length(x);
+    n=length(all)
     for i in 1:n
-        dxi=[];
-        dyi=[];
-        k=0;
-        for j in 1:n
-            r=sqrt((x[i]-x[j])^2+(y[i]-y[j])^2);
-            if r<=rv && i!=j
-                rx=x[i]-x[j];
-                ry=y[i]-y[j];
-                push!(dxi, rx)
-                push!(dyi, ry)
-                k=1;
-            end
-        end
-
-        if k>0
-            dxi_m=-1*sum(dxi);
-            dyi_m=-1*sum(dyi);
-
-            ax[i]=dx[i]-dxi_m;
-            ay[i]=dy[i]-dyi_m;
-            l=sqrt(ax[i]^2+ay[i]^2);
-            ax[i]*=1/l;
-            ay[i]*=1/l;
+        r=norm(position, all[i].pos)
+        if r <= viewarea && !equals(position, all[i].pos)
+            vi = Vec2(-1,-1)*(all[i].pos - position)
+            push!(di, vi)
+            k=1
         end
     end
 
-    return ax,ay
+    if k>0
+        acc = vecsum(di) - speed
+        # l = norm(mdi,position)
+        # acc = ai/Vec2(l,l)
+    end
+
+    return acc
 end
 
-function cohesion(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Vector{Float64},rv::Float64)
-    ax=fill(0.0,10);
-    ay=fill(0.0,10);
+function cohesion(position::Vec2, speed::Vec2, viewarea::Float64,all::Vector{Boid})
+    acc = Vec2(0,0)
     
-    n=length(x);
+    n = length(all)
+    ipos = Vec2[]
+    k = 0
     for i in 1:n
-        xi=[];
-        yi=[];
-        k=0;
-        for j in 1:n
-            r=sqrt((x[i]-x[j])^2+(y[i]-y[j])^2);
-            if r<=rv && i!=j
-                push!(xi, x[j])
-                push!(yi, y[j])
-                k=1;
-            end
-        end
-
-        if k>0
-            xm=mean(xi);
-            ym=mean(yi);
-            rx=xm-x[i];
-            ry=ym-y[i];
-
-            l=sqrt(rx^2+ry^2);
-            ax[i]=rx/l;
-            ay[i]=ry/l;
+        r = norm(position, all[i].pos)
+        if r <= viewarea && !equals(position, all[i].pos)
+            push!(ipos, all[i].pos)
+            k=1
         end
     end
 
-    return ax,ay
+    if k>0
+        m = vecmean(ipos)
+        vi = m - position # желаемая в этом случае скорость (длинны катетов)
+        l = norm(m, position)
+        acc = (vi - speed)/Vec2(l,l)
+    end
+
+    return acc
 end
 
-function alignment(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Vector{Float64},rv::Float64)
-    ax=fill(0.0,10);
-    ay=fill(0.0,10);
+function alignment(position::Vec2,speed::Vec2,viewarea::Float64,all::Vector{Boid})
+    acc = Vec2(0,0)
     
-    n=length(x);
-    for i in 1:n
-        dxi=[];
-        dyi=[];
-        k=0;
-        for j in 1:n
-            r=sqrt((x[i]-x[j])^2+(y[i]-y[j])^2);
-            if r<=rv && i!=j
-                push!(dxi, dx[j])
-                push!(dyi, dy[j])
-                k=1;
-            end
-        end
+    n = length(all)
+    di = Vec2[]
+    k = 0
 
-        if k>0
-            ax[i]=sum(dxi)-dx[i];
-            ay[i]=sum(dyi)-dy[i];
-            ax[i]/=100;
-            ay[i]/=100;
+    for i in 1:n
+        r=norm(position, all[i].pos)
+        if r<=viewarea !equals(position, all[i].pos)
+            push!(di, all[i].speed)
+            k=1
         end
     end
 
-    return ax,ay
-end
-
-function speedcheck(dx::Vector{Float64},dy::Vector{Float64})
-    n=length(dx);
-    limit=10;
-    for i in 1:n
-        v=sqrt(dx[i]^2*dy[i]^2);
-        if v>limit
-            k=limit/v;
-            dx[i]=dx[i]*k;
-            dy[i]=dy[i]*k;
-        end
+    if k>0
+        acc = vecsum(di) - speed
+        # acc /= Vec2(100,100)
     end
 
-    return dx,dy
+    return acc
 end
 
-function rules(boid::Vector{Boid})
-    position=boid.position; speed=boid.speed; acceleration=boid.acceleration; viewarea=boid.viewarea
+function speedcheck(speed::Vec2)
+    v = sqrt(speed.x^2*speed.y^2)
+    limit = 10
+    if v > limit
+        k = v/limit
+        speed = speed/Vec2(k,k)
+    end
+
+    return speed
+end
+
+function rules(boid::Boid, all::Vector{Boid})
+    position = boid.pos; speed = boid.speed; viewarea = boid.viewarea
     
-    acc_cohesion=Vec2(0,0); acc_separation=Vec2(0,0); acc_alignment=Vec2(0,0); acc_res=Vec2(0,0)
+    acc_cohesion = Vec2(0,0); acc_separation = Vec2(0,0); acc_alignment = Vec2(0,0); acc_res = Vec2(0,0)
 
-    acc_cohesion=cohesion(position,speed,viewarea)
-    acc_separation=separation(position,speed,viewarea)
-    acc_alignment=alignment(position,speed,viewarea)
+    # acc_cohesion = cohesion(position, speed, viewarea,all)
+    acc_separation = separation(position,speed,viewarea,all)
+    # acc_alignment = alignment(position,speed,viewarea,all)
 
-    acc_res=acc_cohesion+acc_separation+acc_alignment
-    speed_res=speed+acc_res
+    acc_res = acc_cohesion + acc_separation + acc_alignment
+    speed_res = speed + acc_res
 
-    speed_res=rebound(position,speed_res)
+    speed_res = rebound(position,speed_res)
 
     return speed_res,acc_res
 end
 
-function redraw(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Vector{Float64})
-    x=x+dx;
-    y=y+dy;
-    # scatter(x, y, markershape = :utriangle, ms=5, lab="", xlim=(0,300), ylim=(0,300))
-    scatter(x, y, markershape = :circle, ms=5, lab="", xlim=(0,300), ylim=(0,300))
-    n=length(x)
-    for i in 1:n
-        l=5
-        lr=sqrt(dx[i]^2+dy[i]^2)
-        k=l/lr
-        dxi=dx[i]*k
-        dyi=dy[i]*k
-        x1=[x[i],x[i]+dxi]
-        y1=[y[i],y[i]+dyi]
-        plot!(x1,y1, lw=3, legend=false)
+function redraw(all::Vector{Boid})
+    x = []
+    y = []
+    for i in 1:length(all)
+        push!(x, all[i].pos.x)
+        push!(y, all[i].pos.y)
     end
-    return x,y
+    scatter(x, y, markershape = :circle, ms=5, lab="", xlim=(0,300), ylim=(0,300))
+
+    l = 5
+    for i in 1:length(all)
+        lr=sqrt(all[i].speed.x^2+all[i].speed.y^2)
+        k=l/lr
+        di = all[i].speed*Vec2(k,k)
+        beak = all[i].pos + di
+        plot!([beak.x, all[i].pos.x], [beak.y, all[i].pos.y], lw=3, legend=false)
+    end
 end
 
-function ui(v::Vector{Boid})
+function ui(all::Vector{Boid})
     anim = @animate for k in 1:1000
-        for i in 1:length(v)
-            boid=v[i];
+        for i in 1:length(all)
+            boid=all[i]
 
-            speed,acceleration=rules(boid)
-            speed=speedcheck(speed)
-            position=redraw()
+            speed, acceleration = rules(boid,all)
+            speed = speedcheck(speed)
             
-            v[i]=Boid(position,speed,acceleration,viewarea=boid.viewarea)
+            position = boid.pos + speed
+            
+            all[i]=Boid(position, speed, acceleration, boid.viewarea)
         end
+
+        redraw(all)
     end
     gif(anim, "anim.gif", fps=15)
+
+    return all
 end
 
-ui(world)
+n=10
+rv=50
+v0=10
+
+world = Boid[]
+for i in 1:n
+    bi = Boid(Vec2(1.1*rand(11:255,1)[1],1.1*rand(11:255,1)[1]),Vec2(v0,v0),Vec2(0,0),rv)
+    push!(world, bi)
+end
+
+world = ui(world)
