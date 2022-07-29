@@ -1,14 +1,27 @@
 using Plots 
 using Statistics
 
+# Vec2
+# +
+# -
+# *
+# /
+# norm
+
+
+# Boid
+#     pos::Vec2
+#     speed::Vec2
+#     acceleration::Vec2
+
+# world = Vector{Boid}
+
 mutable struct Vars
     x::Vector{Float64}
     y::Vector{Float64}
     dx::Vector{Float64}
     dy::Vector{Float64}
     rv::Float64
-    vmin::Float64
-    vmax::Float64
 
     function Vars()
         x=rand(11:250,10);
@@ -16,10 +29,8 @@ mutable struct Vars
         dx=fill(1,10);
         dy=fill(1,10);
         rv=50.0;
-        vmin=sqrt(2);
-        vmax=5;
 
-        new(x, y, dx, dy, rv, vmin, vmax)
+        new(x, y, dx, dy, rv)
     end
 end
 
@@ -58,24 +69,45 @@ function rebound(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::V
     return dx,dy
 end
 
-function separation(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Vector{Float64},rv::Float64)
+function separation(x::Vector{Float64},y::Vector{Float64},rv::Float64,dx::Vector{Float64},dy::Vector{Float64})
+    ax=fill(0.0,10);
+    ay=fill(0.0,10);
+
     n=length(x);
     for i in 1:n
+        dxi=[];
+        dyi=[];
+        k=0;
         for j in 1:n
             r=sqrt((x[i]-x[j])^2+(y[i]-y[j])^2);
             if r<=rv && i!=j
-                dx1=-1*(x[j]-x[i]);
-                dy1=-1*(y[j]-y[i]);
-                l=sqrt(dx1^2+dy1^2);
-                dx[i]=dx[i]+dx1*(1/l);
-                dy[i]=dy[i]+dy1*(1/l);
+                rx=x[i]-x[j];
+                ry=y[i]-y[j];
+                push!(dxi, rx)
+                push!(dyi, ry)
+                k=1;
             end
         end
+
+        if k>0
+            dxi_m=-1*sum(dxi);
+            dyi_m=-1*sum(dyi);
+
+            ax[i]=dx[i]-dxi_m;
+            ay[i]=dy[i]-dyi_m;
+            l=sqrt(ax[i]^2+ay[i]^2);
+            ax[i]*=1/l;
+            ay[i]*=1/l;
+        end
     end
-    return dx,dy
+
+    return ax,ay
 end
 
 function cohesion(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Vector{Float64},rv::Float64)
+    ax=fill(0.0,10);
+    ay=fill(0.0,10);
+    
     n=length(x);
     for i in 1:n
         xi=[];
@@ -93,19 +125,22 @@ function cohesion(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::
         if k>0
             xm=mean(xi);
             ym=mean(yi);
-            dx1=xm-x[i];
-            dy1=ym-y[i];
-            
-            l=sqrt(dx1^2+dy1^2);
-            dx[i]=dx[i]+dx1*(1/l);
-            dy[i]=dy[i]+dy1*(1/l);
+            rx=xm-x[i];
+            ry=ym-y[i];
+
+            l=sqrt(rx^2+ry^2);
+            ax[i]=rx/l;
+            ay[i]=ry/l;
         end
     end
 
-    return dx,dy
+    return ax,ay
 end
 
 function alignment(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Vector{Float64},rv::Float64)
+    ax=fill(0.0,10);
+    ay=fill(0.0,10);
+    
     n=length(x);
     for i in 1:n
         dxi=[];
@@ -121,17 +156,48 @@ function alignment(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy:
         end
 
         if k>0
-            dx1=sum(dxi);
-            dy1=sum(dyi);
-            
-            dx[i]=dx[i]+dx1;
-            dy[i]=dy[i]+dy1;
+            ax[i]=sum(dxi)-dx[i];
+            ay[i]=sum(dyi)-dy[i];
+            ax[i]/=100;
+            ay[i]/=100;
+        end
+    end
+
+    return ax,ay
+end
+
+function speedcheck(dx::Vector{Float64},dy::Vector{Float64})
+    n=length(dx);
+    limit=10;
+    for i in 1:n
+        v=sqrt(dx[i]^2*dy[i]^2);
+        if v>limit
+            k=limit/v;
+            dx[i]=dx[i]*k;
+            dy[i]=dy[i]*k;
         end
     end
 
     return dx,dy
 end
 
+function rooles(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Vector{Float64},rv::Float64)
+    ax_coh=fill(0.0,10);ay_coh=fill(0.0,10);ax_sep=fill(0.0,10);ay_sep=fill(0.0,10);ax_al=0;ay_al=fill(0.0,10)
+
+    ax_coh,ay_coh=cohesion(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Vector{Float64},rv::Float64)
+    ax_sep,ay_sep=separation(x::Vector{Float64},y::Vector{Float64},rv::Float64,dx::Vector{Float64},dy::Vector{Float64})
+    # ax_al,ay_al=alignment(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Vector{Float64},rv::Float64)
+
+    ax_res=ax_sep.+ax_coh.+ax_al;
+    ay_res=ay_sep.+ay_coh.+ay_al;
+
+    dx=dx.+ax_res;
+    dy=dy.+ay_res;
+
+    dx,dy=rebound(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Vector{Float64})
+
+    return dx,dy
+end
 
 function redraw(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Vector{Float64})
     x=x+dx;
@@ -152,32 +218,12 @@ function redraw(x::Vector{Float64},y::Vector{Float64},dx::Vector{Float64},dy::Ve
     return x,y
 end
 
-function speedcheck(dx::Vector{Float64},dy::Vector{Float64})
-    n=length(dx);
-    limit=10;
-    for i in 1:n
-        v=sqrt(dx[i]^2*dy[i]^2);
-        if v>limit
-            k=limit/v;
-            dx[i]=dx[i]*k;
-            dy[i]=dy[i]*k;
-        end
-    end
-
-    return dx,dy
-end
-
 function ui(v::Vars)
-
     anim = @animate for k in 1:1000
-        v.dx,v.dy=cohesion(v.x,v.y,v.dx,v.dy,v.rv);
-        v.dx,v.dy=separation(v.x,v.y,v.dx,v.dy,v.rv);
-        # v.dx,v.dy=alignment(v.x,v.y,v.dx,v.dy,v.rv);
-        v.dx,v.dy=rebound(v.x,v.y,v.dx,v.dy);
+        v.dx,v.dy=rooles(v.x,v.y,v.dx,v.dy,v.rv)
         v.dx,v.dy=speedcheck(v.dx,v.dy);
-        v.x,v.y=redraw(v.x,v.y,v.dx,v.dy,);
+        v.x,v.y=redraw(v.x,v.y,v.dx,v.dy);
     end
-
     gif(anim, "anim.gif", fps=15)
 end
 
