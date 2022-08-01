@@ -144,7 +144,7 @@ function separation(position::Vec2,speed::Vec2,viewarea::Float64,all::Vector{Boi
     for i in 1:n
         r=norm(position, all[i].pos)
         if r <= viewarea && !equals(position, all[i].pos)
-            vi = Vec2(-1,-1)*(all[i].pos - position)
+            vi = Vec2(-1,-1)*(all[i].pos - position)/Vec2(r/10,r/10)
             push!(di, vi)
             k=1
         end
@@ -152,8 +152,6 @@ function separation(position::Vec2,speed::Vec2,viewarea::Float64,all::Vector{Boi
 
     if k>0
         acc = vecsum(di) - speed
-        # l = norm(mdi,position)
-        # acc = ai/Vec2(l,l)
     end
 
     return acc
@@ -177,7 +175,8 @@ function cohesion(position::Vec2, speed::Vec2, viewarea::Float64,all::Vector{Boi
         m = vecmean(ipos)
         vi = m - position # желаемая в этом случае скорость (длинны катетов)
         l = norm(m, position)
-        acc = (vi - speed)/Vec2(l,l)
+        acc = (vi - speed)
+        # acc = acc/Vec2(l,l)
     end
 
     return acc
@@ -191,8 +190,8 @@ function alignment(position::Vec2,speed::Vec2,viewarea::Float64,all::Vector{Boid
     k = 0
 
     for i in 1:n
-        r=norm(position, all[i].pos)
-        if r<=viewarea !equals(position, all[i].pos)
+        r = norm(position, all[i].pos)
+        if r <= viewarea !equals(position, all[i].pos)
             push!(di, all[i].speed)
             k=1
         end
@@ -207,8 +206,8 @@ function alignment(position::Vec2,speed::Vec2,viewarea::Float64,all::Vector{Boid
 end
 
 function speedcheck(speed::Vec2)
-    v = sqrt(speed.x^2*speed.y^2)
-    limit = 10
+    v = sqrt(speed.x^2+speed.y^2)
+    limit = 2
     if v > limit
         k = v/limit
         speed = speed/Vec2(k,k)
@@ -217,16 +216,28 @@ function speedcheck(speed::Vec2)
     return speed
 end
 
+function accurationcheck(acc_res::Vec2)
+    a = sqrt(acc_res.x^2+acc_res.y^2)
+    limit = 0.1
+    if a > limit
+        k = a/limit
+        acc_res = acc_res/Vec2(k,k)
+    end
+
+    return acc_res
+end
+
 function rules(boid::Boid, all::Vector{Boid})
     position = boid.pos; speed = boid.speed; viewarea = boid.viewarea
     
     acc_cohesion = Vec2(0,0); acc_separation = Vec2(0,0); acc_alignment = Vec2(0,0); acc_res = Vec2(0,0)
 
-    # acc_cohesion = cohesion(position, speed, viewarea,all)
+    acc_cohesion = cohesion(position, speed, viewarea,all)
+    acc_alignment = alignment(position,speed,viewarea,all)
     acc_separation = separation(position,speed,viewarea,all)
-    # acc_alignment = alignment(position,speed,viewarea,all)
 
     acc_res = acc_cohesion + acc_separation + acc_alignment
+    acc_res = accurationcheck(acc_res)
     speed_res = speed + acc_res
 
     speed_res = rebound(position,speed_res)
@@ -241,7 +252,7 @@ function redraw(all::Vector{Boid})
         push!(x, all[i].pos.x)
         push!(y, all[i].pos.y)
     end
-    scatter(x, y, markershape = :circle, ms=5, lab="", xlim=(0,300), ylim=(0,300))
+    scatter(x, y, markershape = :circle, ms=4, lab="", xlim=(0,300), ylim=(0,300))
 
     l = 5
     for i in 1:length(all)
@@ -283,4 +294,4 @@ for i in 1:n
     push!(world, bi)
 end
 
-world = ui(world)
+world = ui(world) 
